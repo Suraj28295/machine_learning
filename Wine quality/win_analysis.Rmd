@@ -1,0 +1,49 @@
+---
+title: "wine"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(corrplot)
+library(plotly)
+setwd("E:/ML/Case study ML/Wine quality")
+```
+
+
+```{r}
+train <- read.csv("wine_train.csv")
+test <- read.csv("wine_test.csv")
+
+train
+```
+
+```{r}
+corrplot(cor(as.matrix(train %>% select(-quality))),type="upper")
+cor(as.matrix(train[,-ncol(train)]))
+
+```
+
+
+```{r}
+ggplotly(ggplot(train,aes(x=density,y=quality,col=as.factor(quality)))+geom_jitter())
+ggplotly(ggplot(train,aes(x=alcohol,y=quality,col=as.factor(quality)))+geom_jitter()+coord_flip())
+
+```
+
+```{r}
+library(randomForest)
+train$quality=as.factor(train$quality)
+estimated<- randomForest(as.factor(quality)~alcohol+density+residual.sugar+free.sulfur.dioxide+citric.acid+pH+volatile.acidity+fixed.acidity,data=train,ntree=500)
+prdctn <- predict(estimated,test)
+p<- as.numeric(as.character(prdctn))
+tab<- table(p,test$quality)
+ct <- cut(p,breaks = c(3,5,6,7),labels = c("bad","normal","good") )
+test_ct<- cut(test$quality,breaks = c(3,5,6,7),labels = c("bad","normal","good"))
+df <- data.frame(id=test$id,taste=ct)
+tb<- table(ct,test_ct)
+(tb[1,1]+tb[2,2]+tb[3,3])/length(ct)
+```
+
