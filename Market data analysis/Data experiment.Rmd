@@ -1,0 +1,87 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(lubridate)
+library(zoo)
+setwd("E:/ML/Case study ML/Market data analysis")
+
+```
+
+```{r}
+infy <- read.csv("INFY.NS(Target).csv",stringsAsFactors = F)
+hcltech <- read.csv("HCLTECH.NS.csv",stringsAsFactors = F) 
+mphasis <- read.csv("MPHASIS.NS.csv",stringsAsFactors = F)
+niit <- read.csv("NIITTECH.NS.csv",stringsAsFactors = F)
+ofss<- read.csv("OFSS.NS.csv",stringsAsFactors = F)
+tata<- read.csv("TATAELXSI.NS.csv",stringsAsFactors = F)
+zensar <- read.csv("ZENSARTECH.NS.csv",stringsAsFactors = F)
+techm <- read.csv("TECHM.NS.csv",stringsAsFactors = F)
+tcs <- read.csv("TCS.NS.csv",stringsAsFactors = F)
+```
+
+```{r}
+infy$Date <- mdy(infy$Date)
+hcltech$Date <- ymd(hcltech$Date)
+mphasis$Date <- ymd(mphasis$Date)
+niit$Date <- ymd(niit$Date)
+ofss$Date <- ymd(ofss$Date)
+tata$Date <- ymd(tata$Date)
+zensar$Date <- ymd(zensar$Date)
+techm$Date <- ymd(techm$Date)
+tcs$Date <- ymd(tcs$Date)
+
+
+```
+
+```{r}
+date_seq<- data.frame(Date=seq.Date(mdy("12-31-2012"),mdy("12-31-2015"),1))
+date_seq1<- data.frame(Date=seq.Date(mdy("1-1-2013"),mdy("1-1-2016"),1))
+infy<- merge(date_seq,infy,all.x =T,by= "Date" )
+hcltech <- merge(date_seq,hcltech,all.x =T,by= "Date" )
+mphasis <- merge(date_seq,mphasis,all.x =T,by= "Date" )
+niit <- merge(date_seq,niit,all.x =T,by= "Date" )
+ofss <- merge(date_seq,ofss,all.x =T,by= "Date" )
+tata <- merge(date_seq,tata,all.x =T,by= "Date" )
+zensar <- merge(date_seq,zensar,all.x =T,by= "Date" )
+techm <- merge(date_seq,techm,all.x =T,by= "Date" )
+tcs <- merge(date_seq,tcs,all.x =T,by= "Date" )
+all_list <- list(hcltech=hcltech,mphasis=mphasis,niit=niit,ofss=ofss,tata=tata,zensar=zensar,techm=techm,tcs=tcs)
+
+
+all_list<- lapply(all_list, function(df){
+  df$Date = date_seq1$Date
+  #df$Date <- mdy(df$Date)
+  df
+  
+})
+#infy <- infy[-1,]
+#infy[nrow(infy)+1,]=NA
+all_merged <<- infy 
+lapply(all_list,function(x)
+  {
+   assign("all_merged",cbind(all_merged,x$Open),envir = .GlobalEnv)
+   
+  })
+
+names(all_merged)[8:ncol(all_merged)] <- names(all_list)
+
+all_merged[1,c("hcltech","mphasis","niit","ofss","tata","zensar","techm","tcs")]=all_merged[2,c("hcltech","mphasis","niit","ofss","tata","zensar","techm","tcs")]
+```
+#Checking if there is any correlation between infosys's next days data to the other IT companys Previous day
+```{r}
+na.approx(all_merged)
+na_removed_merged<- as.data.frame(apply(all_merged[-c(1,2),],2,na.approx.default))
+subset_merged <- na_removed_merged %>% select(Close,hcltech,mphasis,niit,ofss,tata,zensar,techm,tcs)
+subset_merged <- as.data.frame(lapply(subset_merged, as.numeric))
+corrplot::corrplot(cor(na.omit(subset_merged)),method = "number")
+sapply(all_merged,function(x){length((x))})
+# 
+# View(subset_merged)
+
+```
+
