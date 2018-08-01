@@ -1,0 +1,47 @@
+---
+title: "infant"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(randomForest)
+train_infant <- read.csv("birthwt_train.csv")
+test_infant <- read.csv("birthwt_test.csv")
+
+train_infant<- as.data.frame(lapply(train_infant,function(x){if(length(unique(x))<=6){as.factor(x)}else{x}}))
+test_infant<- as.data.frame(lapply(test_infant,function(x){if(length(unique(x))<=6){as.factor(x)}else{x}}))
+
+fac_col <- names(train_infant)[sapply(train_infant, is.factor)]
+fac_col_test <- names(test_infant)[sapply(test_infant, is.factor)]
+
+df1=as.data.frame(lapply(test_infant[,fac_col[-1]],as.factor))
+
+comb_fact <- t(combn(fac_col,2))
+
+apply(comb_fact, 1,function(x){
+    chsq <- chisq.test(train_infant[,x[1]],train_infant[,x[2]])
+    if(chsq$p.value<0.05)
+    {
+      c(x[1],x[2],chsq$p.value)
+    }
+    else
+    {
+      "no relation"
+    }
+  })
+
+rf_model=randomForest(low~ui+smoke+ptl,data=train_infant,ntree=200,replace=T,importance=T)
+x <- data.frame(id=test_infant$id,low=predict(rf_model,df1))
+
+
+tabl
+```
+
+```{r}
+test_infant
+```
+

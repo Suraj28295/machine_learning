@@ -1,0 +1,93 @@
+---
+title: "credit"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+library(dplyr)
+train <- read.csv("credit_train.csv")
+test <- read.csv("credit_test.csv")
+actual <- read.csv("credit_actual.csv")
+ncol(train)
+
+
+sapply(train,function(x){length(unique(x))})
+
+train$class <- ifelse(train$Class=="Good",1,0)
+train<- as.data.frame(lapply(train, function(x){if(length(unique(x))<=5){as.factor(x)}else{x}}))
+test<- as.data.frame(lapply(test, function(x){if(length(unique(x))<=5){as.factor(x)}else{x}}))
+
+
+
+train_matrix <- train %>% select(-Class)
+test_matrix <- test %>% select(-id)
+train_matrix$class <- as.factor(train_matrix$class)
+
+
+
+rf_model <- randomForest::randomForest(as.formula(paste0("class~Amount+Age+","Duration+ForeignWorker+CheckingAccountStatus.lt.0+CheckingAccountStatus.0.to.200+CheckingAccountStatus.none+CreditHistory.NoCredit.AllPaid+CreditHistory.ThisBank.AllPaid+CreditHistory.Critical+Purpose.NewCar+Purpose.UsedCar+Purpose.Radio.Television+Purpose.Education+SavingsAccountBonds.lt.100+SavingsAccountBonds.500.to.1000+SavingsAccountBonds.Unknown+EmploymentDuration.lt.1+EmploymentDuration.4.to.7+Personal.Male.Divorced.Seperated+Personal.Female.NotSingle+Personal.Male.Single+Property.RealEstate+Property.Unknown+OtherInstallmentPlans.Bank+OtherInstallmentPlans.None+Housing.Rent+Housing.Own")),data=train_matrix)
+
+predictn <- predict(rf_model,test_matrix)
+result<- data.frame(id=test[,"id"],Class=ifelse(predictn==1,"Good","Bad"))
+
+
+```
+```{r}
+
+View(str(train_matrix[,-ncol(train_matrix)]))
+View(str(test_matrix))
+dim(train_matrix[,-ncol(train_matrix)])
+dim(test_matrix)
+
+```
+
+```{r}
+#Get only factor variables
+get_factors <- function(df)
+{
+ 
+  v= sapply(df, function(df){if(length(unique(df))>1){TRUE}else{FALSE}})
+  return(names(df)[v])
+}
+train_factor <- get_factors(train_matrix)
+
+```
+
+
+
+```{r}
+#Get combination of the factor columns
+comb_fact <- merge(train_factor,train_factor,by=NULL)
+comb_fact <- comb_fact[comb_fact$x != comb_fact$y,]
+#OR
+comb_fact1 <- combn(train_factor,2,simplify = F)# Will give you list of all the combinations of length 2
+a <- c()
+
+
+
+#Automating Chi square for each factor variable combination
+for (comb in comb_fact1) {
+  chi_res <- chisq.test(train_matrix[,comb[1]],train_matrix[,comb[2]])
+  if(chi_res$p.value<0.05)
+  {
+  a=c(a,c(comb[1],comb[2]))
+  }
+}
+
+a[1:3]
+c2=unlist(a[seq(1,length(a),by=2)])
+length(a)
+t_df <- data.frame(c1=unlist(a[seq(1,length(a),by=2)]),c2=unlist(a[seq(2,length(a),by=2)]),stringsAsFactors=F)
+t_df %>% filter(c2=="class") %>% select(c1)
+str(t_df)
+fac_to_choose=""
+class(cat(t_df[t_df$c2=="class","c1"],sep = "+"))
+fac_to_choose =paste(t_df[t_df$c2=="class","c1"],collapse  = "+")
+formula(fac_to_choose)
+```
+

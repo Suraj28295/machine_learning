@@ -1,0 +1,35 @@
+---
+title: "infant"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(dplyr)
+library(nnet)
+```
+
+```{r}
+ setwd("E:/ML/Case study ML/infant weight")
+
+train_infant <-read.csv("birthwt_train.csv") 
+test_infant <-read.csv("birthwt_test.csv") 
+nrow(train_infant)
+train_infant<- as.data.frame(lapply(train_infant,function(x){if(length(unique(x))<=3){as.factor(x)}else{x}}))
+test_infant<- as.data.frame(lapply(test_infant,function(x){if(length(unique(x))<=3){as.factor(x)}else{x}}))
+train_infant$low <- ifelse(train_infant$low==1,"yes","no")
+train_infant$race
+tree_model<- tree(data=train_infant,formula=as.factor(low)~.)
+tree_pred<- predict(tree_model,test_infant[,-1])
+predicted<- data.frame(id=test_infant[,1],low=ifelse(tree_pred[,1]>0.65,0,1))
+
+```
+
+
+```{r}
+
+
+
+```
+

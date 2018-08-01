@@ -1,0 +1,72 @@
+---
+title: "housing"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(corrplot)
+library(nnet)
+```
+
+
+```{r}
+library(randomForest)
+actual <- read.csv("housing_actual.csv")
+train <- read.csv("housing_train.csv")
+test <- read.csv("housing_test.csv")
+train$chas=as.factor(train$chas)
+test$chas=as.factor(test$chas)
+df=data.frame()
+
+colnames <- names(train)[1:ncol(train)-1]
+t_list=list()
+for(j in seq(1,13))
+{
+  combn_col = combn(colnames,m=2)
+  t_list[[j]]=combn_col
+}
+
+
+
+
+
+df=data.frame(att="",RMSE=0,stringsAsFactors = F)
+
+
+parse_list=function(t)
+{
+ for(i in 1:ncol(t))
+{
+   rf_model <- randomForest(as.formula(paste0("medv~",paste0( t[,i],collapse = "+"))),data = train,ntree=121)
+
+test$predicted <- predict(rf_model,test)
+
+df=rbind(df,c(paste0( t[,i],collapse = "+"),sum(sqrt((actual$medv-test$predicted)^2/sum(actual$medv)))))
+  
+ }
+  return(df)
+}
+
+l<- lapply(t_list[5:10], parse_list)
+
+
+l_new <- lapply(l,function(comb_df1){
+  temp<- as.data.frame(comb_df1)
+temp[temp$RMSE<4.5,]
+})
+l_3 <- lapply(l,function(comb_df1){
+  temp<- as.data.frame(comb_df1)
+temp[temp$RMSE<4,]
+})
+
+x=test[,c("id","predicted")]
+sum((x$predicted-actual$medv)^2)
+```
+
+```{r}
+res1 <- cor.mtest(train, conf.level = .95)
+corrplot(cor(train),type = "upper",sig.level = .6)
+
+```
+
