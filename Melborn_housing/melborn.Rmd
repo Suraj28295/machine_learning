@@ -1,0 +1,260 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+setwd("E:/ML/Case study ML/Melborn_housing")
+library(fastAdaboost)
+library(plyr)
+```
+
+#Reading Dataset
+```{r}
+full=read.csv("Melbourne_housing_FULL.csv")
+
+
+sapply(final_melborn,function(x){length(unique(x))})
+View(full)
+
+
+#labeling factors
+full<- as.data.frame(lapply(full,function(x){
+  if(is.factor(x))
+  {
+  factor(x,labels = 1:length(unique(x)))
+    }
+  else
+  {
+    x
+  }
+}))
+
+
+full<- full[!is.na(full$Price),] %>% select(-Address,-BuildingArea,-YearBuilt)
+
+
+
+
+nu<- sapply(full,function(x){sum(is.na(x))*100/length(x)})
+all_null_rowno<-as.numeric(row.names(full[is.na(full$Bedroom2)&is.na(full$Bathroom),names(nu[nu!=0])]))
+
+full<- subset(full, !(rownames(full) %in% all_null_rowno))
+sapply(full,function(x){sum(is.na(x))*100/length(x)})
+
+
+```
+#Null value imputation using machine learning algorithms
+```{r}
+library(rpart)
+full$Bedroom2=as.factor(full$Bedroom2)
+full$Bathroom=as.factor(full$Bathroom)
+full$Car=as.factor(full$Car)
+
+#For Bathroom
+not_null_bathroom<- full[!is.na(full$Bathroom),]
+null_bathroom<- full[is.na(full$Bathroom),]
+str(not_null_bathroom)
+tree_bath <- rpart(Bathroom~Bedroom2+Rooms,data=not_null_bathroom) 
+pre_bath <- predict(tree_bath,null_bathroom)
+pre_bath <- as.data.frame(pre_bath)
+predicted_bath<- apply(pre_bath,1,function(x){names(x)[x==max(x)]})
+full[row.names(full) %in% names(predicted_bath),"Bathroom"]<- predicted_bath
+
+#For Car
+not_null_Car<- full[!is.na(full$Car),]
+null_Car<- full[is.na(full$Car),]
+str(not_null_Car)
+tree_Car <- rpart(Car~Bedroom2+Rooms+Bathroom,data=not_null_Car) 
+pre_Car <- predict(tree_Car,null_Car)
+pre_Car <- as.data.frame(pre_Car)
+predicted_Car<- apply(pre_Car,1,function(x){names(x)[x==max(x)]})
+full[row.names(full) %in% names(predicted_Car),"Car"]<- predicted_Car
+
+
+#For landsize
+
+not_null_Landsize<- full[!is.na(full$Landsize),]
+null_Landsize<- full[is.na(full$Landsize),]
+str(not_null_Landsize)
+tree_Landsize <- randomForest::randomForest(Landsize~Rooms+Type+Price+Method+Bedroom2+Bathroom+Car+Regionname,data=not_null_Landsize) 
+pre_Landsize <- predict(tree_Landsize,null_Landsize)
+pre_Landsize <- as.data.frame(pre_Landsize)
+null_Landsize$Landsize=pre_Landsize$pre_Landsize
+final_melborn <-rbind(not_null_Landsize,null_Landsize)
+
+sapply(final_melborn,function(x){sum(is.na(x))*100/length(x)})
+
+#write.csv(final_melborn,"Final Melbourne.csv")
+
+
+```
+
+
+```{r}
+
+final_melborn<- final_melborn %>% select(-Longtitude,-Lattitude,-Date,-Postcode)
+numeric_melborne <- as.data.frame(lapply(final_melborn,as.numeric))
+min_price=min(final_melborn$Price)
+max_price <- max(final_melborn$Price)
+normalize <- function(x) {
+    return ((x - min(x)) / (max(x) - min(x)))
+  }
+numeric_melborne<- as.data.frame(lapply(numeric_melborne,normalize))
+melbourne<- data.frame(lapply(numeric_melborne,function(x){if(length(unique(x))<=40){as.factor(x)}else{x}}))
+
+melbourne_train <- sample_n(melbourne,size = 0.9*nrow(melbourne))
+melbourne_test <- sample_n(melbourne,size = .1*nrow(melbourne))
+
+
+```
+
+```{r}
+random_forest <- function(x)
+{
+random_result <- randomForest::randomForest(Price~.,data=melbourne_train,ntree=200)
+random_pred<- predict(random_result,melbourne_test)
+test_rates <- melbourne_test$Price*(max_price-min_price)+min_price
+predicted_rates<- random_pred*(max_price-min_price)+min_price
+rmse_rate <- sum((test_rates-predicted_rates)^2)/nrow(melbourne_test)
+
+rmse <- sum((random_pred-melbourne_test$Price)^2)/nrow(melbourne_test)
+return(c(x,rmse))
+}
+rand<- lapply(100:102, random_forest)
+rand <- data.frame(rand)
+```
+
+
+```{r}
+  df_train <- melbourne_train
+  df_test <- melbourne_test
+  target <- 
+  xgboost_algo<- function(training_dataframe,testing_dataframe,target)
+  {
+      target_vals <- unique(target)
+      new_tr <- model.matrix(~.+0,data = training_dataframe%>% select_(-target)) 
+      new_ts <- model.matrix(~.+0,data =testing_dataframe%>% select(-target))
+      training_dataframe$default <- as.double(as.character(training_dataframe$default))
+      testing_dataframe$default <- as.double(as.character(testing_dataframe$default))
+      xg_object_tr <- xgb.DMatrix(data=new_tr,label=ifelse(training_dataframe$default==min(training_dataframe$default),0,1)) 
+      xg_object_ts <- xgb.DMatrix(data = new_ts,label=ifelse(testing_dataframe$default==min(testing_dataframe$default),0,1))
+      params <- list(booster = "gbtree", objective = "binary:logistic", eta=0.3, gamma=0, max_depth=6, min_child_weight=1, subsample=1, colsample_bytree=1)
+      xgb1 <- xgb.train (params = params, data = xg_object_tr, nrounds = 79, watchlist = list(val=xg_object_ts,train=xg_object_tr), print.every.n = 10, early.stop.round = 10, maximize = F , eval_metric = "error")
+      #model prediction
+      xgbpred <- predict (xgb1,xg_object_ts)
+      acc_vec<- as.factor(ifelse(xgbpred<0.5, 0.725113421255055,1.45022684251011))
+      confusionMatrix(acc_vec,as.factor(testing_dataframe$default))
+       }
+        xgb_selected<- xgboost_algo(df_train,df_test,target)
+```
+
+```{r}
+
+
+corrplot::corrplot(cor(melbourne_train[,sapply(melbourne_train,is.double)]))
+```
+
+
+```{r}
+# Anova when target variable is a numerical value
+Anova <- function(dataset,column)
+{
+fac_col <- sapply(dataset, is.factor)  
+num_col <- names(dataset)[fac_col]
+temp <- c()
+j <- 1
+  for (num_c in num_col) {
+  
+  aov_t <- aov(dataset[,column]~dataset[,num_c])
+  summ <- summary(aov_t)
+  pr <- summ[[1]][1,'Pr(>F)']
+  if(pr <0.05)
+    {
+    temp<- append(temp,pr)
+    names(temp)[j] <- num_c
+    j=j+1
+    }
+  
+  }
+
+  return(names(temp))
+}
+relevant_num<- Anova(melbourne_train,'Price')
+
+final_formula<- as.formula(paste0("Price~Suburb+Distance+",paste(relevant_num,collapse ="+")))
+
+```
+
+```{r}
+
+random_result_selected <- randomForest::randomForest(final_formula,data=melbourne_train,ntree=200)
+random_pred_selected<- predict(random_result,melbourne_test)
+test_rates <- melbourne_test$Price*(max_price-min_price)+min_price
+predicted_rates_selected<- random_pred*(max_price-min_price)+min_price
+rmse_rate_selected <- sum((test_rates-predicted_rates)^2)/nrow(melbourne_test)
+
+
+ada_model <- adaboost(formula=final_formula,data = melbourne_train,nIter = 200)
+
+library(xgboost)
+xgbFit=xgboost(data=as.matrix(as.data.frame(lapply(melbourne_train,as.numeric))),nfold=5,label=as.matrix(melbourne_train$Price),nrounds=2200,verbose=FALSE,objective='reg:linear',eval_metric='rmse',nthread=8,eta=0.01,gamma=0.0468,max_depth=6,min_child_weight=1.7817,subsample=0.5213,colsample_bytree=0.4603)
+
+predict_xgb <- 
+```
+```{r}
+library(Metrics)
+library(xgboost)
+melbourne_train <- sample_n(melbourne,size = 0.9*nrow(melbourne))
+melbourne_test <- sample_n(melbourne,size = .1*nrow(melbourne))
+  df_train <- melbourne_train
+  df_test <- melbourne_test
+```
+
+```{r}
+xgboost_algo<- function(training_dataframe=df_train,testing_dataframe=df_test,target)
+  {
+      new_tr <- model.matrix(~.+0,data = training_dataframe%>% select(-Price)) 
+      new_ts <- model.matrix(~.+0,data =testing_dataframe%>% select(-Price))
+      training_dataframe[,target] <- as.double(as.character(training_dataframe[,target]))
+      testing_dataframe[,target] <- as.double(as.character(testing_dataframe[,target]))
+      xg_object_tr <- xgb.DMatrix(data=new_tr,label = training_dataframe[,target]) 
+      xg_object_ts <- xgb.DMatrix(data = new_ts,label =testing_dataframe[,target])
+      params <- list(booster = "gbtree", objective = "reg:linear", eta=0.2, gamma=0, max_depth=10, min_child_weight=1, subsample=1, colsample_bytree=.6)
+      xgb1 <- xgb.train (params = params, data = xg_object_tr, nrounds = 120, watchlist = list(val=xg_object_ts,train=xg_object_tr), print.every.n = 50, early.stop.round = 10, maximize = F , eval_metric = "rmse")
+      #model prediction
+      xgbpred <- predict (xgb1,xg_object_ts)
+      return(xgbpred)
+       }
+        xgb_selected<- xgboost_algo(df_train ,df_test,"Price")
+        
+
+```
+
+
+```{r}
+result=data.frame(actual=df_test$Price,predicted=xgb_selected)
+
+test_Price <- result$actual*(max_price-min_price)+min_price
+predicted_Price<- result$predicted*(max_price-min_price)+min_price
+options(scipen=999)
+lm_model <- lm(Price~.,melbourne_train )
+predict_lm <- predict(lm_model,melbourne_test)
+result=data.frame(actual=df_test$Price,predicted_xgb=xgb_selected,predicted_lm=predict_lm,test_Price,predicted_Price,lm_pred=predict_lm*(max_price-min_price)+min_price)
+
+rmse(result$test_Price,result$predicted_Price)
+rmse(result$test_Price,result$lm_pred)
+cor(result %>% select(-actual,-predicted,-lm_pred))
+cor(result %>% select(-actual,-predicted,-predicted_Price))
+
+result1<- rbind(result %>% select(test_Price,predicted_Price) %>% mutate(algo="XGBoost"),result %>% select(test_Price,predicted_Price=lm_pred)%>% mutate(algo="linear regression"))
+result2<- rbind(result %>% select(test_Price,actual,predicted_xgb) %>% mutate(algo="XGBoost"),result %>% select(test_Price,actual,predicted_xgb=predicted_lm)%>% mutate(algo="linear regression")) %>% mutate(diff=result2$actual-result2$predicted_xgb)
+benchmark_check<- result2 %>% ggplot(aes(x=test_Price,y=diff,color=algo))+geom_jitter()+ylim(1,-1)
+plotly::ggplotly(benchmark_check)
+(result2$test_Price)
+#plot(,)
+```
+
